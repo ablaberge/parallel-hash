@@ -5,7 +5,7 @@
 #include "rtclock.h"
 #include "ts_hashmap.h"
 
-#define NUM_OPS_PER_THREAD 10000
+#define NUM_OPS_PER_THREAD 10
 
 // globals
 ts_hashmap_t *map = NULL;
@@ -61,7 +61,6 @@ int main(int argc, char *argv[]) {
 	for (int i = 0; i < num_threads; i++) {
 		pthread_join(threads[i], NULL);
 	}
-
 	// end clocking!
 	endTime = rtclock();
 
@@ -70,7 +69,7 @@ int main(int argc, char *argv[]) {
 
 	// print content and timing results
 	// UNCOMMENT BELOW FOR DEBUGGING
-	// printmap(map);
+	//printmap(map);
 	printf("Number of ops = %d, time elapsed = %.6f sec\n", map->numOps, (endTime-startTime));
 	printf("Time per op   = %.6f ms\n", (double)(endTime-startTime)/map->numOps*1000);
 	freeMap(map);

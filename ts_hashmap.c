@@ -15,11 +15,12 @@ ts_hashmap_t *initmap(int capacity)
 {
   ts_hashmap_t *map = malloc(sizeof(ts_hashmap_t));
   map->table = malloc(sizeof(ts_entry_t *) * capacity);
+  map->locks = malloc(sizeof(pthread_mutex_t) * capacity);
 
-  // Initialize all lists to null
-  for (int i = 0; i < capacity; i++)
+  for (int i = 0; i < capacity; i++)   // Initialize all lists to null
   {
     map->table[i] = NULL;
+    pthread_mutex_init(&map->locks[i], NULL);
   }
 
   map->capacity = capacity;
@@ -29,12 +30,19 @@ ts_hashmap_t *initmap(int capacity)
   return map;
 }
 
+/**
+ * Obtains the value associated with the given key.
+ * @param map a pointer to the map
+ * @param key a key to search
+ * @return the value associated with the given key, or INT_MAX if key not found
+ */
 int get(ts_hashmap_t *map, int key)
 {
-  // Calculate the index using the hash function
   int index = ((unsigned int)key) % map->capacity;
+  int returnVal;
 
-  // Start at the head of the linked list in this bucket
+  pthread_mutex_lock(&map->locks[index]); // Lock up this bucket
+
   ts_entry_t *entry = map->table[index];
 
   // Traverse the linked list
@@ -42,10 +50,16 @@ int get(ts_hashmap_t *map, int key)
   {
     if (entry->key == key)
     {
-      return entry->value;
+      map->numOps++;
+      returnVal = entry->value;
+      pthread_mutex_unlock(&map->locks[index]); // Unlock the bucket after we have the value
+      return returnVal;
     }
     entry = entry->next;
   }
+
+  map->numOps++;
+  pthread_mutex_unlock(&map->locks[index]); // Unlock the bucket after searching is finished
   return INT_MAX; // Key not found
 }
 
@@ -59,19 +73,21 @@ int get(ts_hashmap_t *map, int key)
 int put(ts_hashmap_t *map, int key, int value)
 {
   int index = ((unsigned int)key) % map->capacity;
+  pthread_mutex_lock(&map->locks[index]); // Lock up this bucket
   ts_entry_t *entry = map->table[index];
-  // Traverse the linked list
-  while (entry != NULL)
+
+  while (entry != NULL) // Traverse the linked list
   {
     if (entry->key == key) // Key exists, replace the value
     {
       int temp = entry->value;
       entry->value = value;
       map->numOps++;
+      pthread_mutex_unlock(&map->locks[index]); // unlock this bucket
       return temp;
     }
     if (entry->next == NULL)
-    { // Need this to handle case where list isn't empty
+    { // Need this to handle case where list isn't empty (I learned the hard way)
       break;
     }
     entry = entry->next;
@@ -94,6 +110,7 @@ int put(ts_hashmap_t *map, int key, int value)
 
   map->size++;
   map->numOps++;
+  pthread_mutex_unlock(&map->locks[index]); // unlock this bucket
   return INT_MAX;
 }
 
@@ -107,6 +124,7 @@ int del(ts_hashmap_t *map, int key)
 {
 
   int index = ((unsigned int)key) % map->capacity;
+  pthread_mutex_lock(&map->locks[index]); // Lock up this bucket
   ts_entry_t *entry = map->table[index];
   ts_entry_t *prev = NULL;
 
@@ -114,7 +132,7 @@ int del(ts_hashmap_t *map, int key)
   {
     if (entry->key == key) // Found the entry for deletion!
     {
-      int temp = entry->value; 
+      int temp = entry->value;
 
       if (prev == NULL) // First item in the list
       {
@@ -128,6 +146,7 @@ int del(ts_hashmap_t *map, int key)
       free(entry);
       map->size--;
       map->numOps++;
+      pthread_mutex_unlock(&map->locks[index]); // Unlock bucket
       return temp;
     }
 
@@ -135,8 +154,9 @@ int del(ts_hashmap_t *map, int key)
     entry = entry->next;
   }
 
- // Key not found
+  // Key not found
   map->numOps++;
+  pthread_mutex_unlock(&map->locks[index]); // Unlock bucket
   return INT_MAX;
 }
 
@@ -170,6 +190,7 @@ void freeMap(ts_hashmap_t *map)
   for (int i = 0; i < map->capacity; i++)
   {
     ts_entry_t *entry = map->table[i];
+    pthread_mutex_destroy(&map->locks[i]);
     while (entry != NULL)
     {
       ts_entry_t *next = entry->next;
@@ -178,11 +199,7 @@ void freeMap(ts_hashmap_t *map)
     }
   }
 
-  // Free the table array itself
   free(map->table);
-
-  // Free the map struct
+  free(map->locks);
   free(map);
-
-  // TODO: destroy locks
 }

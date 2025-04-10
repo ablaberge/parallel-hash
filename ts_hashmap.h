@@ -10,12 +10,14 @@ typedef struct ts_entry_t {
 
 // A hashmap contains an array of pointers to entries,
 // the capacity of the array, the size (number of entries stored), 
+// an array of mutex locks,
 // and the number of operations that it has run.
 typedef struct ts_hashmap_t {
    ts_entry_t **table;
    int numOps;
    int capacity;
    int size;
+   pthread_mutex_t *locks;
 } ts_hashmap_t;
 
 // function declarations
